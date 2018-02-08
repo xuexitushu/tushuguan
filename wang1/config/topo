@@ -15,7 +15,7 @@
       "name":"Local Trainer",
       "port":8001,
       "ip":""
-    },
+    }
     
   ],
   "datacenter":{
