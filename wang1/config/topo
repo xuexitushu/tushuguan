@@ -1,0 +1,27 @@
+#topology.json
+{
+  "controller":{
+    "name":"Local Controller",
+    "port":8000,
+    "ip":""
+  },
+  "subservices":[
+    {
+      "name":"DevBox Trainer",
+      "port":8003,
+      "ip":""
+    },
+    {
+      "name":"Local Trainer",
+      "port":8001,
+      "ip":""
+    },
+    
+  ],
+  "datacenter":{
+    "name":"Local Datacenter",
+    "port":8002,
+    "ip":"147."
+  }
+}
+
