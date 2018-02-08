@@ -1,0 +1,18 @@
+#config_controller.json
+{
+  "app":{
+    "type":0,
+    "name":"Local Controller",
+    "prefix":"",
+    "version":"0.0.1",
+    "log_file":"controller_log.txt",
+    "log_level":"DEBUG",
+    "service_update_interval":5,
+    "local_db":"./experiments.db",
+    "modeldb_shared":"./mdb_shared",
+    "port":8000,
+    "ip":""
+  }
+}
+
+
