@@ -1,0 +1,218 @@
+#train_agrs
+import cv2
+# change logs are located in tensor_train.py
+import keras
+import keras.backend as kb
+from keras.backend import set_image_dim_ordering
+from keras.models import load_model
+from keras.callbacks import ModelCheckpoint, LearningRateScheduler
+from itertools import *  # for izip
+import seg_arch as arch
+import random
+from PIL import ImageFilter
+from random import randint
+import time
+import datetime
+import os,sys
+import numpy as np
+import PIL
+from PIL import Image 
+import tools
+import tensorflow as tf
+# https://handong1587.github.io/deep_learning/2015/10/09/segmentation.html
+# https://keras.io/getting-started/functional-api-guide/
+from keras.preprocessing.image import ImageDataGenerator
+#FLAGS = tf.flags.FLAGS
+
+do_reduce_mean = True
+def load_and_preprocess_data_k(h, w,data_path,rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max):
+   
+    print 'train_path:', data_path
+    #####################################################################################
+    im_path = data_path + '2_im/'  # for both masks_mul and masks_mul_1extra
+    m_path = data_path + '2_m/'  # 2masks_6cl_ex_ring
+    data_1s = sorted([s for s in os.listdir(im_path) ])
+    m_1s = sorted([s for s in os.listdir(m_path) ])
+    data_1s = data_1s[0:6]
+    m_1s = m_1s[0:6]
+    images, masks = tools.import_data_k_segnet(im_path, m_path, data_1s, m_1s, h, w, len(data_1s),rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max,
+                                               do_Flipping=True, do_gblur=True, do_darken=True)
+    if do_reduce_mean:
+        images = tools.reduce_mean_stdev(images)
+    #####################################################################################
+    add_data_2 = False
+    if add_data_2:
+        im_path2 = data_path + '1_im/'  #
+        m_path2 = data_path + '1_m/'  #
+        data_2s = sorted([s for s in os.listdir(im_path2)])
+        m_2s = sorted([s for s in os.listdir(m_path2)])
+        images2, mask2 = tools.import_data_k_segnet(im_path2, m_path2, data_2s, m_2s, h, w, len(data_2s),
+                                                    do_Flipping=True, do_gblur=True, do_darken=True)
+        print 'train_path:', im_path2, ', images2 shape:', images2.shape, ', mask2 shape:', mask2.shape
+        if do_reduce_mean:
+            images2 = tools.reduce_mean_stdev(images2)
+        images = np.concatenate((images, images2), axis=0)
+        masks = np.concatenate((masks, mask2), axis=0)
+    #####################################################################################
+    add_data_3 = False
+    if add_data_3:
+        im_path3 = data_path + '1A/1_im_fresh/'  # main_path
+        m_path3 = data_path + '1A/1_m_fresh/'  # main_path
+        data_3s = sorted([s for s in os.listdir(im_path3)])
+        m_3s = sorted([s for s in os.listdir(m_path3)])
+        images3, mask3 = tools.import_data_k_segnet(im_path3, m_path3, data_3s, m_3s, h, w, len(data_3s),
+                                                    do_Flipping=True, do_gblur=True, do_darken=True)
+        print 'train_path:', im_path3, ', images3 shape:', images3.shape, ', mask3 shape:', mask3.shape
+        if do_reduce_mean:
+            images3 = tools.reduce_mean_stdev(images3)
+        images = np.concatenate((images, images3), axis=0)
+        masks = np.concatenate((masks, mask3), axis=0)
+    ####################################################################################
+    add_data_4 = False
+    if add_data_4:
+        im_path4 = data_path + '2_im/'  # main_path
+        m_path4 = data_path + '2_m/'  # main_path
+        data_4s = sorted([s for s in os.listdir(im_path4)])
+        m_4s = sorted([s for s in os.listdir(m_path4)])
+        # data_4s = data_4s[10:30]
+        # m_4s = m_4s[10:30]
+        images4, mask4 = tools.import_data_k_segnet(im_path4, m_path4, data_4s, m_4s, h, w,
+                                                    len(data_4s),
+                                                    do_Flipping=True, do_gblur=True, do_darken=True)
+        print 'train_path:', im_path4, ', images4 shape:', images4.shape, ', mask4 shape:', mask4.shape
+        if do_reduce_mean:
+            images4 = tools.reduce_mean_stdev(images4)
+        images = np.concatenate((images, images4), axis=0)
+        masks = np.concatenate((masks, mask4), axis=0)
+    add_data_5 = False
+    if add_data_5:
+        im_path5 = data_path + '/3images_mul/'  # main_path
+        m_path5 = data_path + '/3masks_mul/'  # main_path
+        data_5s = sorted([s for s in os.listdir(im_path5)])
+        m_5s = sorted([s for s in os.listdir(m_path5)])
+        # data_5s = data_5s[150:280]
+        # m_5s = m_5s[150:280]
+        images5, mask5 = tools.import_data_k_segnet(im_path5, m_path5, data_5s, m_5s, h, w,
+                                                    len(data_5s),
+                                                    do_Flipping=True, do_gblur=True, do_darken=True)
+        print 'train_path:', im_path5, ', images5 shape:', images5.shape, ', mask5 shape:', mask5.shape
+        if do_reduce_mean:
+            images5 = tools.reduce_mean_stdev(images5)
+        images = np.concatenate((images, images5), axis=0)
+        masks = np.concatenate((masks, mask5), axis=0)
+    ####################################################################################
+    print 'images shape after mean reduction:', images.shape
+    return images, masks
+
+def load_and_preprocess_data_onlinetest_k(h, w,PROJ_DIR,rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max):
+    total_files_im, total_files_m, rnd_files_im, rnd_files_m = [], [], [], []
+    all_read_path_im, all_read_path_m = [], []
+    folders = ['1/']
+   
+    for folder in folders:
+        read_path_im = PROJ_DIR + 'Test_Data/' + folder + 'im/'
+        read_path_m = PROJ_DIR + 'Test_Data/' + folder + 'm/'
+        files_im = sorted([s for s in os.listdir(read_path_im) if '.' in s])  # if 'out' in s])
+        files_m = sorted([s for s in os.listdir(read_path_m) if '.' in s])  # if 'out' in s])
+        print 'len of online test:', len(files_im)
+       
+        len_f = len(files_im)
+        rnd_indx = random.sample(xrange(len_f -1),int(0.99*len_f)) #population,length
+        print 'rnd_indx:', rnd_indx
+        for i in rnd_indx:
+            rnd_files_im.append(files_im[i])
+            rnd_files_m.append(files_m[i])
+        #rnd_flip = random.sample(xrange(maxNum - 1), maxNum - 1)
+        total_files_im = total_files_im + rnd_files_im
+        total_files_m = total_files_m + rnd_files_m
+        # for i in xrange(len(files_im)):
+        #  all_read_path_im.append(read_path_im)
+        #  all_read_path_m.append(read_path_m)
+    images_t, masks_t = tools.import_data_k_segnet(read_path_im, read_path_m, total_files_im, total_files_m, h, w,
+                                                   len(total_files_im),rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max,
+                                                   do_Flipping=False, do_gblur=False, do_darken=False)
+    if do_reduce_mean:
+        images_t = tools.reduce_mean_stdev(images_t)
+    return images_t, masks_t
+
+def train_2c(PROJ_DIR,model_path,learning_rate,model_path_name,data_path,
+batch_size,MAX_ITERATION,INPUT_SIZE,bg_LABEL,train_mode,
+rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max,): 
+    if 'con' in train_mode:
+        # manual
+        #model_path_name = model_path + '081_548-0.05' + '.hdf5'  #
+        print 'follow model:', model_path_name
+        set_image_dim_ordering(dim_ordering='th')
+    h,w = INPUT_SIZE, INPUT_SIZE
+    if 'con' not in train_mode:
+        model_path_name = model_path + '.hdf5'
+    print 'train binary classes, load data,learning rate:', learning_rate
+   
+    images, masks = load_and_preprocess_data_k(h, w,data_path,rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max)
+    print 'train len:', len(images)
+   
+   
+    images_t, masks_t = load_and_preprocess_data_onlinetest_k(h, w,PROJ_DIR,rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max)
+    print 'images shape', images.shape
+   
+    # images = images.transpose((None, 1, h, w))
+    print 'set checkpoint'
+ 
+    save_params = ModelCheckpoint(filepath=model_path + bg_LABEL + '_{epoch:02d}-{val_loss:.2f}.hdf5',
+                                  monitor='val_loss', verbose=2,
+                                  save_best_only=False, save_weights_only=False, mode='auto')
+   
+    keras.callbacks.History()
+    epochs = MAX_ITERATION  #
+    learning_rate = learning_rate  #
+    decay_rate = learning_rate / epochs
+    momentum = 0.99
+    sgd = arch.SGD(lr=learning_rate, momentum=momentum)  #
+    set_image_dim_ordering(dim_ordering='th')
+    print 'load network'
+    if train_mode == 'new_train':
+        model = arch.segnet_arch_2c(h, w)
+    if train_mode == 'con_train':
+        # model_name = model_path + 'w_table_patches_136top.hdf5'
+        model = load_model(model_path_name)
+    print 'compile'
+    # compile option 1, best suitable for the 2 to 6 classes data, reduce loss quickly
+    model.compile(loss='binary_crossentropy', optimizer=sgd)
+   
+      
+   
+    model.fit(images, masks, batch_size=1, nb_epoch=epochs, verbose=1, shuffle=True,
+                  validation_data=(images_t, masks_t), callbacks=[save_params])
+   
+    # visulization
+    # verbose=1 to switch on printing batch result
+    print 'save'
+    model.save(model_path + 'model_' + bg_LABEL + '.h5')
+
+# use tensorflow
+# http://warmspringwinds.github.io/tensorflow/tf-slim/2016/11/22/upsampling-and-image-segmentation-with-tensorflow-and-tf-slim/
+
+def main(_):
+    PROJ_DIR = sys.argv[1]
+    model_path = sys.argv[2]
+    learning_rate = float(sys.argv[3])
+    model_path_name = sys.argv[4]
+    data_path = sys.argv[5]
+    batch_size = int(sys.argv[6])
+    MAX_ITERATION = int(sys.argv[7])  # int(1e6 + 1)
+    INPUT_SIZE = int(sys.argv[8])
+    bg_LABEL = sys.argv[9]  # + ".meta"
+    train_mode= sys.argv[10]
+    rnd_blurriness_min=int(sys.argv[11])
+    rnd_blurriness_max=int(sys.argv[12])
+    rnd_darkness_min=int(sys.argv[13])
+    rnd_darkness_max=int(sys.argv[14])
+    dropouts=sys.argv[15]
+    train_2c(PROJ_DIR,model_path,learning_rate,model_path_name,data_path,
+batch_size,MAX_ITERATION,INPUT_SIZE,bg_LABEL,
+train_mode,
+rnd_blurriness_min,rnd_blurriness_max,rnd_darkness_min ,rnd_darkness_max,)
+    print("Training done!")
+
+if __name__ == '__main__':
+    tf.app.run()
