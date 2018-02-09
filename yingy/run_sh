@@ -1,0 +1,21 @@
+#run_app.sh
+PROJ_DIR=/home/hy/Documents/occupancy/
+SAVE_LOG_PATH=/home/hy/Documents/occupancy/testbench/
+model_path=/home/hy/Documents/occupancy/testbench/1/
+learning_rate=0.000098
+model_path_name=$model_path
+data_path=Data/training/2A/
+batch_size=1
+MAX_ITERATION=3
+INPUT_SIZE=160
+bg_LABEL=1_
+train_mode=new_train  #con_train
+rnd_blurriness_min=150
+rnd_blurriness_max=280
+rnd_darkness_min=29
+rnd_darkness_max=150
+dropouts=[]
+#
+cd $PROJ_DIR
+SCRIPT=train_ssh_args.py
+python $SCRIPT $PROJ_DIR $model_path $learning_rate $model_path_name $data_path $batch_size $MAX_ITERATION $INPUT_SIZE $bg_LABEL $train_mode $rnd_blurriness_min $rnd_blurriness_max $rnd_darkness_min $rnd_darkness_max $dropouts
