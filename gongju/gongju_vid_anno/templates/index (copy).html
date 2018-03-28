@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Silanno 2</title>
+
+	<!-- jquery -->
+	<script src="static/vendor/jquery/js/jquery.min.js"></script>
+	<!-- bootstrap CSS -->
+	<link href="static/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+	<!--link href="static/vendor/bootstrap/css/awesome-bootstrap-checkbox.css" rel="stylesheet"-->
+	<script src="static/vendor/bootstrap/js/bootstrap.min.js"></script>
+	<!-- bootstrap filestyle-->
+	<script src="static/vendor/bootstrap-filestyle/src/bootstrap-filestyle.min.js"></script>
+	<!-- fabric.js -->
+	<script src="static/vendor/fabric/js/fabric.min.js"></script>
+	<!-- tiff.js -->
+	<!--script src="static/vendor/tiffjs/tiff.min.js"></script-->
+	<!-- app specific css -->
+	<link href="static/css/main.css" rel="stylesheet">
+
+</head>
+
+<body>
+	<div id="inspector-panel">
+		<div id="logo">Silanno 2
+
+		</div>
+		<ul class="list-group">
+			<li class="list-group-item">
+				<div class="row center-row">
+					<div class="col-md-3 col-blk">
+						<b>Project:</b>
+					</div>
+					<div class="col-md-9 col-blk">
+						<select class="form-control input-sm" id="proj_sel" data-default={{selected_project}}>
+                                {% for project in project_map %}
+                                    <option value="{{project_map[project]}}">{{project}}</option>
+                                {% endfor %}
+                                </select>
+					</div>
+				</div>
+			</li>
+			<li class="list-group-item">
+				<div class="row row-center">
+					<div class="col-md-4 col-blk">
+						<!--label class="btn btn-sm btn-default btn-blk">
+                            <span class="glyphicon glyphicon-folder-open"></span>
+                            &nbsp;
+                           Images <input id='folder_input' type="file" style="display: none;" webkitdirectory directory multiple/>
+                        </label-->
+
+						<button id='save-file' class="btn btn-sm btn-default btn-blk">
+								<span class="glyphicon glyphicon-floppy-disk"></span>
+							</button>
+
+					</div>
+					<div class="col-md-4 col-blk">
+						<label class="btn btn-sm btn-default btn-blk">
+						<span class="glyphicon glyphicon-folder-open"></span>
+                          <input id='video_input' type="file" style="display: none;"/>
+                        </label>
+					</div>
+					<div class="col-md-4 col-blk">
+						<button id='export-button' class="btn btn-sm btn-default btn-blk">
+						<span class="glyphicon glyphicon-export"></span>
+                        </button>
+					</div>
+			</li>
+			<li id="raw_file_name" class="list-group-item" style="overflow-wrap: break-word">
+			</li>
+			<li class="list-group-item list-group-header">Label Control</li>
+			<li class="list-group-item">
+				<div class="row row-center">
+					<div class="col-md-6 col-blk">
+						<button id="add_label_btn" class="btn btn-sm btn-default btn-blk">Add (Ins)</button>
+					</div>
+					<div class="col-md-6 col-blk">
+						<button id="delete_label_btn" class="btn btn-sm btn-default btn-blk">Delete (Del)</button>
+					</div>
+				</div>
+			</li>
+			<!--li class="list-group-item">
+
+
+				<input type="checkbox" id="copy_if_blank" checked>
+				<label for="copy_if_blank">
+						Copy Annotation (N0)
+					</label>
+
+
+			</li-->
+			<li class="list-group-item list-group-header">Label Inspector</li>
+			<li class="list-group-item">
+				<div class=row>
+					<div class="col-md-5 col-blk"><b>X, Y, W, H:</b></div>
+					<div id="transform" class="col-md-7 col-blk"></div>
+				</div>
+			</li>
+			<li class="list-group-item">
+				<div class="row center-row">
+					<div class="col-md-4 col-blk"><b>Class:</b></div>
+					<div id="class" class="col-md-8 col-blk">
+						<select class="form-control input-sm" id="class_input">
+								<option value=1>single-line</option>
+								<option value=2>double-line</option>
+							</select>
+					</div>
+				</div>
+			</li>
+			<li class="list-group-item">
+				<div class="row center-row">
+					<div class="col-md-4 col-blk"><b>State:</b></div>
+					<div id="state" class="col-md-8 col-blk">
+						<select class="form-control input-sm" id="state_input">
+								<option value=0>None</option>
+							</select>
+					</div>
+				</div>
+				<!--div class="row center-row">
+					<div class="col-md-4 col-blk"><b>State:</b></div>
+					<div id="state" class="col-md-8 col-blk">
+						<input class="form-control input-sm" id="state_input" type="text" value="CH" />
+					</div>
+				</div-->
+			</li>
+			<li class="list-group-item">
+				<div>
+					<div><b>Comment:</b></div>
+				</div>
+				<div>
+					<textarea id="comment_input" class="form-control input-sm"></textarea>
+				</div>
+			</li>
+
+			<li class="list-group-item list-group-header">Navigation</li>
+			<li class="list-group-item">
+				<div class="row nav-row" id="noncopy_nav_btns" style="text-align:center">
+					<div class="col-md-4 col-blk">
+						<input id="step-size" class="form-control input-sm" value=1>
+					</div>
+					<div class="col-md-8 col-blk">
+						<div class="btn-group btn-group-sm" role="group">
+
+							<button id="sb-btn" class="btn btn-info">
+							<span class="glyphicon glyphicon-step-backward" aria-hidden="true"></span>
+						</button>
+
+							<!--button id="csf-btn" class="btn btn-danger">
+							<span class="glyphicon glyphicon-play" aria-hidden="true"></span>
+						</button-->
+
+							<button id="sf-btn" class="btn btn-info">
+							<span class="glyphicon glyphicon-step-forward" aria-hidden="true"></span>
+						</button>
+
+						</div>
+					</div>
+				</div>
+			</li>
+			<li class="list-group-item">
+				<div class="row">
+					<div class="col-md-4"><b>Frame:</b></div>
+					<div id="state" class="col-md-8">
+						<input id="frame-input" type="text" class="form-control" value="0">
+					</div>
+				</div>
+				<div class="row">
+					<div class="col-md-4"><b>Name:</b></div>
+					<div id="frame_name" class="col-md-8">
+
+					</div>
+				</div>
+			</li>
+			<!--li class="list-group-item">
+					<div class="row">
+						<div class="col-md-5"><b>Step:</b></div>
+						<div id="state" class="col-md-7">
+							<input id="step-input" type="text" class="form-control" value="5" oninput="updateLabel(this)">
+						</div>
+					</div>
+				</li-->
+			<!--li class="list-group-item">
+					<div class="row">
+						<div class="col-md-5"><b>Playspeed:</b></div>
+						<div id="state" class="col-md-7">
+							<input id="step-input" type="text" class="form-control" value="5" oninput="updateLabel(this)">
+						</div>
+					</div>
+				</li-->
+
+		</ul>
+		</div>
+		<div id="canvas-panel">
+			<canvas id="c"></canvas>
+			<canvas id="c2" hidden></canvas>
+			<video id="currentVideo"></video>
+			<img id="currentImg" hidden>
+			<canvas id="status-display"></canvas>
+		</div>
+
+	</div>
+	<div id="video-control">
+		<button id="bar-toggle" data-hidden='true' class="btn btn-info" data-toggle="collapse" data-target="#progress-bar">
+			<span class="glyphicon glyphicon-triangle-top" aria-hidden="true"></span>
+			Show Progress Bar
+		</button>
+		<div id="progress-bar" class="collapse">
+			<div id="slider-container">
+				<input list="ticks" id="imgSlider" type="range" min="0" max="100" step="1" value="0" />
+				<datalist id="ticks">
+				</datalist>
+			</div>
+		</div>
+	</div>
+</body>
+
+<!-- Additional Scripts -->
+
+<script>
+   
+
+</script>
+<script src="static/js/annotation_adapter.js"></script>
+<script src="static/js/media_loader.js"></script>
+<script src="static/js/video_loader.js"></script>
+<script src="static/js/label_controller.js"></script>
+<script src="static/js/main.js"></script>
+<script src="static/js/listeners.js"></script>
+<script src="static/js/keybind.js"></script>
+
+</html>
