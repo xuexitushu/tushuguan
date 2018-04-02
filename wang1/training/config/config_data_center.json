@@ -1,0 +1,16 @@
+{
+  "app":{
+    "type":2,
+    "name":"Local Datacenter",
+    "prefix":"",
+    "version":"0.0.1",
+    "log_file":"data_log.txt",
+    "log_level":"DEBUG",
+    "service_update_interval":5,
+    "local_db":"./exp.db",
+    "port":8002,
+    "ip":"140.5.170.247",
+    "source_folder":"/home/hy/Documents/occupancy/Data/"
+  }
+}
+

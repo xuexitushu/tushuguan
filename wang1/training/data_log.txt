@@ -1,0 +1,6 @@
+2018-02-15 22:51:09 - INFO - Service update interval: 5 
+2018-02-15 22:51:55 - INFO - Service update interval: 5 
+2018-02-15 22:57:27 - INFO - Service update interval: 5 
+2018-02-15 23:00:49 - INFO - Service update interval: 5 
+2018-02-15 23:00:50 - INFO - Local Datacenter started
+2018-02-15 23:01:05 - INFO - Local Datacenter stopped

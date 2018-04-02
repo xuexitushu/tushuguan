@@ -1,0 +1,28 @@
+{
+  "MODEL":
+    {
+      "NAME": "dummy_model",
+      "TYPE": "classification",
+      "CONFIG": {
+        "learning_rate":100
+      },
+      "METRICS": [
+        {"TYPE": "accuracy", "VALUE": 0.0}
+      ],
+      "TAG": "train",
+      "extra-metadata-field": "this is an example extra key value pair for model metadata",
+      "notes": {
+        "owner": "yildirim",
+        "description": "this experiment is conducted to test the stability of our data management system"
+      }
+    },
+  "DATASETS": [
+        {
+          "FILENAME": "dataset1",
+          "METADATA": {"datasetid" : "dataset_id"},
+          "TAG": "train"
+        }
+    ]
+}
+
+

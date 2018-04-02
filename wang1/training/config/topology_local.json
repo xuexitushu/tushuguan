@@ -1,0 +1,28 @@
+{
+  "controller":{
+    "name":"Local Controller",
+    "port":8000,
+    "ip":"147.54.170.247"
+  },
+  "subservices":[
+    {
+      "name":"DevBox Trainer_occ",
+      "port":8003,
+      "ip":"147.54.170.247"
+    },
+    {
+      "name":"Local Trainer",
+      "port":8001,
+      "ip":"147.54.170.247"
+    }
+  ],
+  "datacenter":{
+    "name":"Local Datacenter",
+    "port":8002,
+    "ip":"147.54.170.247"
+
+  }
+}
+
+
+

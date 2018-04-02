@@ -1,0 +1,22 @@
+{
+  "app":{
+    "type":3,
+    "name":"Local Trainer Occ",
+    "prefix":"",
+    "version":"0.0.1",
+    "log_file":"data_log.txt",
+    "log_level":"DEBUG",
+    "service_update_interval":5,
+    "local_db":"./exp_occ.db",
+    "port":8003,
+    "ip":"147.54.",
+    "local_db":"./subservice.db",
+    "data_location":"/home/hy/Documents/occupancy/Data",
+    "copy_method":"local",
+    "trainer_ip":"127.0.0.1",
+    "trainer_port":"5000",
+    "cache":"/home/hy/Documents/occupancy/Data/cache/",
+    "self_desc":"localhost"
+  }
+}
+

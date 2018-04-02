@@ -1,0 +1,192 @@
+# eva_vid
+# Based on run_.py
+
+
+import cv2
+import os
+import sys
+import argparse
+import copy
+import numpy as np
+from PIL import Image
+import scipy.misc as misc
+
+# parameters_good_features
+maxCornersp1, maxCornersp2 = 4000, 4000  # 400,400
+qualityLevelp1, qualityLevelp2 = 0.005, 0.005  # 0.005,0.005
+minDistancep1, minDistancep2 = 1, 1  # 1,1
+blockSizep1, blockSizep2 = 3, 3  # 3,3
+useHarrisDetectorp1, useHarrisDetectorp2 = False, False
+kp1, kp2 = 0.04, 0.04  # 0.04,0.04
+factor = 1  # 1
+
+# parameters_detector
+scaleFactor = 1.03  # 1.03
+minNeighbors = 1  # 1
+minSize = 1  # 5
+maxSize = 250  # 250
+demo_scale = 1
+hits_count, miss_frame = 0, 0
+print_info, CLOSE_ALL, save_image = False, False, False
+
+if len(sys.argv) > 1:
+  parser = argparse.ArgumentParser()
+  parser.add_argument("-v", "--video", help="input video file", required=True)
+  parser.add_argument("-m", "--model", help="input model file", required=True)
+  parser.add_argument("-s", "--save_img", help="save image", required=True)
+  args = parser.parse_args()
+
+  video_file = args.video
+  model = args.model
+else:
+  VIDEO_LOAD_PATH = '/media/sf_shared_win/vids/'
+  # VIDEO_LOAD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),'..',
+  #                               'aggr_vids')
+  vids = sorted([s for s in os.listdir(VIDEO_LOAD_PATH) if '_T.' in s if 'fight' in s])
+  video_file = os.path.join(VIDEO_LOAD_PATH, vids[0])
+  print 'vid file:', video_file
+
+  vid_name, _ = os.path.splitext(os.path.basename(video_file))
+  model = 'opflow_model.xml'
+
+SAVE_PATH = './save_path/'
+if not os.path.exists(SAVE_PATH):
+  os.makedirs(SAVE_PATH)
+
+if not os.path.exists(video_file):
+  raise IOError("Videofile does not exist!", video_file)
+
+if not os.path.exists(model):
+  raise IOError('xml model file not exists:', model)
+
+cap = cv2.VideoCapture(video_file)
+sub_pix_win_size = (10, 10)
+win_size = (31, 31)
+max_points = 4000
+need_to_init = True
+
+points1 = None
+points2 = None
+prev_gray_frame = None
+optical_flow_image = None
+
+haar_cascade = cv2.CascadeClassifier()
+haar_cascade.load(model)
+
+frame_i = 0
+while True:
+  res, frame = cap.read()
+
+  frame_i += 1
+
+  if not res:
+    print("vid end or can't grab frame!", video_file)
+    break
+
+  w, h, c = frame.shape
+  optical_flow_image = np.zeros((w, h, 1), np.uint8)
+
+  gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+  if need_to_init:
+    points1 = cv2.goodFeaturesToTrack(gray_frame,
+                                      maxCorners=maxCornersp1,
+                                      qualityLevel=qualityLevelp1,
+                                      minDistance=minDistancep1,
+                                      blockSize=blockSizep1,
+                                      useHarrisDetector=useHarrisDetectorp1,
+                                      k=kp1)
+    need_to_init = False
+
+  elif len(points2) and frame_i % 1 == 0:
+    points1 = cv2.goodFeaturesToTrack(gray_frame,
+                                      maxCorners=maxCornersp2,
+                                      qualityLevel=qualityLevelp2,
+                                      minDistance=minDistancep2,
+                                      blockSize=blockSizep2,
+                                      useHarrisDetector=useHarrisDetectorp2,
+                                      k=kp2)
+
+    points1, status, err = cv2.calcOpticalFlowPyrLK(prev_gray_frame,
+                                                    gray_frame,
+                                                    points2,
+                                                    points1,
+                                                    winSize=win_size,
+                                                    maxLevel=3,
+                                                    criteria=(
+                                                    cv2.TERM_CRITERIA_MAX_ITER | cv2.TERM_CRITERIA_EPS, 20, 0.03),
+                                                    flags=0,
+                                                    minEigThreshold=0.001)
+
+    for p1, p2 in zip(points1, points2):
+      res = cv2.norm(p2 - p1)
+      if frame_i % 30 == 0:
+        if print_info and not CLOSE_ALL:
+          print 'res:', res, ',p1.x-p2.x:', p1[0][0] - p2[0][0]
+      if p1[0][0] - p2[0][0] > 0 and res > 1:
+        cv2.line(optical_flow_image, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), 255, 1, 1, 0)
+        cv2.line(frame, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), (0, 0, 255), 1, 1, 0)
+      else:
+        if res > 1:
+          cv2.line(optical_flow_image, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), 255, 1, 1, 0)
+          cv2.line(frame, (p1[0][0], p1[0][1]), (p2[0][0], p2[0][1]), (0, 0, 255), 1, 1, 0)
+
+    points1 = cv2.goodFeaturesToTrack(gray_frame,
+                                      maxCorners=int(maxCornersp2 * factor),
+                                      qualityLevel=qualityLevelp2 * factor,  # 0.005
+                                      minDistance=int(minDistancep2 * factor),
+                                      blockSize=int(blockSizep2 * factor),
+                                      useHarrisDetector=useHarrisDetectorp2,
+                                      k=kp2 * factor)
+
+  hits = haar_cascade.detectMultiScale(optical_flow_image,
+                                       scaleFactor=scaleFactor,
+                                       minNeighbors=minNeighbors,
+                                       flags=0,
+                                       minSize=(minSize, minSize),
+                                       maxSize=(maxSize, maxSize))
+  print 'frame', frame_i, ', hits', len(hits)
+  if len(hits):
+    hits_count = hits_count + len(hits)
+    # print(hits)
+    factor = factor * 1.01
+    cv2.rectangle(frame, (hits[0][0], hits[0][1]), (hits[0][0] + hits[0][2], hits[0][1] + hits[0][3]), (255, 0, 0), 2)
+    y2 = hits[0][0]
+    y = hits[0][1]
+    x2 = hits[0][0] + hits[0][2]
+    x = hits[0][1] + hits[0][3]
+  else:
+    cv2.waitKey(90)
+    miss_frame += 1
+    tp_color = (255, 0, 0)
+    cv2.putText(frame, "missed",
+                org=(int(frame.shape[1] * 0.1), int(frame.shape[0] * 0.15)),
+                fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=tp_color, thickness=2)
+    optical_flow_image = optical_flow_image[y:y2, x:x2]
+    cv2.imwrite(SAVE_PATH + '/mis_' + vid_name + '_%05d.png' % frame_i, optical_flow_image)
+  if frame_i % 10 == 0 and save_image:
+    print 'frame', frame_i
+    print 'y:y2, x:x2:', y, y2, x, x2
+    optical_flow_image = optical_flow_image[y:y2, x:x2]
+    cv2.imwrite(SAVE_PATH + '/fa_' + vid_name + '_%05d.png' % frame_i, optical_flow_image)
+
+  points2 = copy.copy(points1)
+  prev_gray_frame = copy.copy(gray_frame)
+
+  if not CLOSE_ALL:
+    cv2.imshow("demo", cv2.resize(frame, (int(demo_scale * frame.shape[1]),
+                                          int(demo_scale * frame.shape[0]))))
+    cv2.imshow("of", cv2.resize(optical_flow_image, (int(demo_scale * optical_flow_image.shape[1]),
+                                                     int(demo_scale * optical_flow_image.shape[0]))))
+
+  key = cv2.waitKey(1) & 0xFF
+  if key == ord('q'):
+    break
+
+cap.release()
+cv2.destroyAllWindows()
+
+print 'vid file, total hits, missed frames, total frames'
+print video_file, hits_count, miss_frame, frame_i
+print maxCornersp1, maxCornersp2, qualityLevelp1, qualityLevelp2, minDistancep1, minDistancep2,
+print blockSizep1, blockSizep2, useHarrisDetectorp1, useHarrisDetectorp2, kp1, kp2, factor,
+print scaleFactor, minNeighbors, minSize, maxSize
