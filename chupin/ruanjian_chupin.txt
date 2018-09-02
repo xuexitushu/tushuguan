@@ -1,0 +1,1904 @@
+deployment/Makefile
+
+MODEL = $(shell ls *pb -1)
+CONFIG = $(shell ls *json -1)
+CONTAINER = $(shell ls *tar -1)
+IMAGE_NAME = $(shell cat image_name)
+RUNTIME = $(shell cat runtime)
+
+install:
+	@echo
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo Installation in progress...
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo
+
+	@echo Image Name: $(IMAGE_NAME)
+	@echo Runtime: $(RUNTIME)
+	docker load -i $(CONTAINER)
+
+	@echo
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo Installation complete, to start:
+	@echo 1- Edit your config file at: $(CONFIG)
+	@echo 2- make start
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo
+
+start:
+	-docker stop -f $(docker ps -a -q)
+	-docker rm -f $(docker ps -a -q)
+	docker run $(RUNTIME) \
+	--restart always \
+	-v $(PWD):/data \
+	-p 5002:5002 \
+	-p 5003:5003 \
+	$(IMAGE_NAME)
+
+
+
+
+
+deploy/ideen.json
+{
+  "version": "0.2",
+  "video": {
+    "location":"/data/data_zoo/test_videos/2018-08-14_16.22.29.0.cam_axis1_p.mp4",
+    "roi": {
+      "left": "185",
+      "upper": "163",
+      "right": "667",
+      "lower": "509"
+    }
+  },
+  "debug": {
+    "display_debug_images": false,
+    "write_debug_images": true,
+    "debug_img_folder": "/data"
+  },
+  "detector": {
+    "model": "/data/model_zoo/str_32_512_5_14153.pb",
+    "confidence": 0.98,
+    "history_size": 100,
+    "decision_ratio": 0.80,
+    "roi_coverage": 0.75
+  },
+  "service": {
+    "ip": "127.0.0.1",
+    "http_port": 5003,
+    "port": 5002,
+    "mode": "live"
+  }
+}
+
+
+deploy/virtual.conf
+{
+  "version": "0.2",
+  "video": {
+    "location":"/data/data_zoo/test_videos/14_16.22.29.0.cam.mp4",
+    "roi": {
+      "left": "185",
+      "upper": "163",
+      "right": "667",
+      "lower": "509"
+    }
+  },
+  "debug": {
+    "display_debug_images": false,
+    "write_debug_images": true,
+    "debug_img_folder": "/data"
+  },
+  "detector": {
+    "model": "/data/model_zoo/str_32_512_5_14153.pb",
+    "confidence": 0.98,
+    "history_size": 100,
+    "decision_ratio": 0.80,
+    "roi_coverage": 0.75
+  },
+  "service": {
+    "ip": "127.0.0.1",
+    "http_port": 5003,
+    "port": 5002,
+    "mode": "live"
+  }
+}
+
+
+config/ideen.config same as above
+config/demo.config
+{
+  "version": "0.2",
+  "video": {
+    "location":"/data/data_zoo/test_videos/14_16.22.29.1.cam.mp4",
+    "roi": {
+      "left": "185",
+      "upper": "163",
+      "right": "667",
+      "lower": "509"
+    }
+  },
+  "debug": {
+    "display_debug_images": true,
+    "write_debug_images": true,
+    "debug_img_folder": "/data"
+  },
+  "detector": {
+    "model": "/data/model_zoo/str_32_512_5_14153.pb",
+    "confidence": 0.98,
+    "history_size": 10,
+    "decision_ratio": 0.8,
+    "roi_coverage": 0.5
+  },
+  "service": {
+    "ip": "127.0.0.1",
+    "port": 5002,
+    "mode": "demo"
+  }
+}
+
+
+docker/images/Dockerfile
+FROM nvidia/cuda:9.0-cudnn7-runtime-ubuntu16.04
+
+ARG TENSORFLOW_PKG
+
+ENV http_proxy 'http://194.145.60.1:9400'
+ENV https_proxy 'http://194.145.60.1:9400'
+ENV no_proxy 'localhost,127.0.0.1,code.gongsi.com'
+ENV SRC /usr/local/src
+
+# Install.
+RUN \
+  apt-get update --fix-missing && \
+  apt-get install -y --no-install-recommends \
+  build-essential git vim cmake python-dev python-pip python-setuptools libaprutil1-dev libglib2.0-dev libgoogle-glog-dev libgtk-3-dev \
+  libv4l-dev libtbb-dev libpomp-dev libgtk2.0-dev libopenblas-dev liblapack-dev gdebi \
+  ffmpeg ffmpeg2theora libavcodec-extra libavcodec-dev libavformat-dev libavresample-dev \
+  libavdevice-dev libavcodec-ffmpeg-extra56 yasm libges-1.0-dev \
+  libssl-dev gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav wget gstreamer1.0-plugins-* && \
+  apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --upgrade pip
+RUN pip install numpy flask
+
+WORKDIR /
+RUN     git clone https://github.com/opencv/opencv.git /opencv
+WORKDIR /opencv
+RUN     git checkout tags/3.3.0 && mkdir -p build
+WORKDIR /opencv/build
+RUN     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DWITH_IPP=OFF -DWITH_FFMPEG=ON -DWITH_GTK=ON \
+        -DWITH_GSTREAMER=ON -DWITH_V4L=ON -DWITH_OPENMP=ON -DWITH_TBB=ON \
+        -DBUILD_opencv_calib3d=OFF -DBUILD_opencv_stitching=OFF -DBUILD_opencv_superres=OFF -DBUILD_TESTS=OFF \
+        -DBUILD_opencv_stitching=OFF -DBUILD_opencv_ml=OFF -DBUILD_opencv_java=OFF -DBUILD_opencv_objdetect=OFF \
+        -DBUILD_opencv_apps=OFF -DBUILD_opencv_videostab=OFF -DBUILD_DOCS=OFF -DBUILD_PERF_TESTS=OFF .. && \
+        make -j8 && make install && ldconfig && rm -rf /opencv
+
+RUN pip install $TENSORFLOW_PKG==1.10.0 pytest
+
+WORKDIR $SRC
+
+
+
+
+docker/images/Dockerfile.deploy
+ARG FLAVOR
+ARG VERSION
+
+FROM docker.gongsi.com/icctv/icctv-apps/huoche:${VERSION}${FLAVOR}
+
+ARG REPO_TOKEN
+ARG REPO_USER=oauth2
+ARG GIT_REF
+
+RUN cd $SRC && \
+    rm -rf icctv-huoche && \
+    git clone http://$REPO_USER:$REPO_TOKEN@code.gongsi.com/iCCTV/icctv-i.git
+
+WORKDIR $SRC/icctv-huoche
+RUN git checkout $GIT_REF
+
+RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends nginx &&\
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY deploy/virtual.conf /etc/nginx/conf.d
+
+WORKDIR $SRC/icctv-huoche
+
+CMD nginx -t
+ENTRYPOINT service nginx start && python app.py -c /data/huoche_config.json
+
+
+
+inference/detector_tfod.py
+import numpy as np
+import tensorflow as tf
+from inference import detector
+
+
+class DetectorTf(detector.Detector):
+    def __init__(self, model):
+        detection_graph = tf.Graph()
+        with detection_graph.as_default():
+            od_graph_def = tf.GraphDef()
+            with tf.gfile.GFile(model, 'rb') as fid:
+                serialized_graph = fid.read()
+                od_graph_def.ParseFromString(serialized_graph)
+                tf.import_graph_def(od_graph_def, name='')
+
+        self.image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
+        self.detection_boxes = detection_graph.get_tensor_by_name('detection_boxes:0')
+        self.detection_scores = detection_graph.get_tensor_by_name('detection_scores:0')
+        self.detection_classes = detection_graph.get_tensor_by_name('detection_classes:0')
+        self.num_detections = detection_graph.get_tensor_by_name('num_detections:0')
+        self.sess = tf.Session(graph=detection_graph)
+
+        self.confidence_threshold = 0.98
+
+    def detect(self, img):
+        if not img.shape:
+            return None
+
+        h, w, c = img.shape
+
+        image_np_expanded = np.expand_dims(img, axis=0)
+        (boxes, scores, classes, num) = self.sess.run(
+            [self.detection_boxes, self.detection_scores, self.detection_classes, self.num_detections],
+            feed_dict={self.image_tensor: image_np_expanded})
+
+        result = []
+        for bb, ss, cc in zip(boxes, scores, classes):
+            for b, s, c in zip(bb, ss, cc):
+                if s > self.confidence_threshold:
+                    y1, x1, y2, x2 = b
+                    x1 = int(w * x1)
+                    y1 = int(h * y1)
+                    x2 = int(w * x2)
+                    y2 = int(h * y2)
+                    result.append(detector.Detection((x1, y1), (x2, y2), c, s))
+        return result
+
+
+static/style.css
+/* ------------------
+ styling for the tables
+   ------------------   */
+
+
+body
+{
+	line-height: 1.6em;
+}
+
+#hor-minimalist-a
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 22px;
+	background: #fff;
+	margin: 45px;
+	width: 90%;
+	border-collapse: collapse;
+	text-align: center;
+}
+#hor-minimalist-a th
+{
+	font-size: 14px;
+	font-weight: normal;
+	color: #039;
+	padding: 10px 8px;
+	border-bottom: 2px solid #6678b1;
+}
+#hor-minimalist-a td
+{
+	color: #669;
+	padding: 9px 8px 0px 8px;
+}
+#hor-minimalist-a tbody tr:hover td
+{
+	color: #009;
+}
+
+
+#hor-minimalist-b
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 16px;
+	background: #fff;
+	margin: 45px;
+	width: 90%;
+	border-collapse: collapse;
+	text-align: center;
+}
+#hor-minimalist-b th
+{
+	font-size: 14px;
+	font-weight: normal;
+	color: #039;
+	padding: 10px 8px;
+	border-bottom: 2px solid #6678b1;
+}
+#hor-minimalist-b td
+{
+	border-bottom: 1px solid #ccc;
+	color: #669;
+	padding: 6px 8px;
+}
+#hor-minimalist-b tbody tr:hover td
+{
+	color: #009;
+}
+
+
+#ver-minimalist
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 30px;
+	margin: 45px;
+	width: 40%;
+	text-align: left;
+	border-collapse: collapse;
+}
+#ver-minimalist th
+{
+	padding: 8px 2px;
+	font-weight: normal;
+	font-size: 14px;
+	border-bottom: 2px solid #6678b1;
+	border-right: 30px solid #fff;
+	border-left: 30px solid #fff;
+	color: #039;
+}
+#ver-minimalist td
+{
+	padding: 12px 2px 0px 2px;
+	border-right: 30px solid #fff;
+	border-left: 30px solid #fff;
+	color: #669;
+}
+
+
+#box-table-a
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+}
+#box-table-a th
+{
+	font-size: 13px;
+	font-weight: normal;
+	padding: 8px;
+	background: #b9c9fe;
+	border-top: 4px solid #aabcfe;
+	border-bottom: 1px solid #fff;
+	color: #039;
+}
+#box-table-a td
+{
+	padding: 8px;
+	background: #e8edff;
+	border-bottom: 1px solid #fff;
+	color: #669;
+	border-top: 1px solid transparent;
+}
+#box-table-a tr:hover td
+{
+	background: #d0dafd;
+	color: #339;
+}
+
+
+#box-table-b
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: center;
+	border-collapse: collapse;
+	border-top: 7px solid #9baff1;
+	border-bottom: 7px solid #9baff1;
+}
+#box-table-b th
+{
+	font-size: 13px;
+	font-weight: normal;
+	padding: 8px;
+	background: #e8edff;
+	border-right: 1px solid #9baff1;
+	border-left: 1px solid #9baff1;
+	color: #039;
+}
+#box-table-b td
+{
+	padding: 8px;
+	background: #e8edff;
+	border-right: 1px solid #aabcfe;
+	border-left: 1px solid #aabcfe;
+	color: #669;
+}
+
+
+#hor-zebra
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+}
+#hor-zebra th
+{
+	font-size: 14px;
+	font-weight: normal;
+	padding: 10px 8px;
+	color: #039;
+}
+#hor-zebra td
+{
+	padding: 8px;
+	color: #669;
+}
+#hor-zebra .odd
+{
+	background: #e8edff;
+}
+
+
+#ver-zebra
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+}
+#ver-zebra th
+{
+	font-size: 14px;
+	font-weight: normal;
+	padding: 12px 15px;
+	border-right: 1px solid #fff;
+	border-left: 1px solid #fff;
+	color: #039;
+}
+#ver-zebra td
+{
+	padding: 8px 15px;
+	border-right: 1px solid #fff;
+	border-left: 1px solid #fff;
+	color: #669;
+}
+.vzebra-odd
+{
+	background: #eff2ff;
+}
+.vzebra-even
+{
+	background: #e8edff;
+}
+#ver-zebra #vzebra-adventure, #ver-zebra #vzebra-children
+{
+	background: #d0dafd;
+	border-bottom: 1px solid #c8d4fd;
+}
+#ver-zebra #vzebra-comedy, #ver-zebra #vzebra-action
+{
+	background: #dce4ff;
+	border-bottom: 1px solid #d6dfff;
+}
+
+
+#one-column-emphasis
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+}
+#one-column-emphasis th
+{
+	font-size: 14px;
+	font-weight: normal;
+	padding: 12px 15px;
+	color: #039;
+}
+#one-column-emphasis td
+{
+	padding: 10px 15px;
+	color: #669;
+	border-top: 1px solid #e8edff;
+}
+.oce-first
+{
+	background: #d0dafd;
+	border-right: 10px solid transparent;
+	border-left: 10px solid transparent;
+}
+#one-column-emphasis tr:hover td
+{
+	color: #339;
+	background: #eff2ff;
+}
+
+
+#newspaper-a
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+	border: 1px solid #69c;
+}
+#newspaper-a th
+{
+	padding: 12px 17px 12px 17px;
+	font-weight: normal;
+	font-size: 14px;
+	color: #039;
+	border-bottom: 1px dashed #69c;
+}
+#newspaper-a td
+{
+	padding: 7px 17px 7px 17px;
+	color: #669;
+}
+#newspaper-a tbody tr:hover td
+{
+	color: #339;
+	background: #d0dafd;
+}
+
+
+#newspaper-b
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+	border: 1px solid #69c;
+}
+#newspaper-b th
+{
+	padding: 15px 10px 10px 10px;
+	font-weight: normal;
+	font-size: 14px;
+	color: #039;
+}
+#newspaper-b tbody
+{
+	background: #e8edff;
+}
+#newspaper-b td
+{
+	padding: 10px;
+	color: #669;
+	border-top: 1px dashed #fff;
+}
+#newspaper-b tbody tr:hover td
+{
+	color: #339;
+	background: #d0dafd;
+}
+
+
+#newspaper-c
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 90%;
+	text-align: left;
+	border-collapse: collapse;
+	border: 1px solid #6cf;
+}
+#newspaper-c th
+{
+	padding: 20px;
+	font-weight: normal;
+	font-size: 13px;
+	color: #039;
+	text-transform: uppercase;
+	border-right: 1px solid #0865c2;
+	border-top: 1px solid #0865c2;
+	border-left: 1px solid #0865c2;
+	border-bottom: 1px solid #fff;
+}
+#newspaper-c td
+{
+	padding: 10px 20px;
+	color: #669;
+	border-right: 1px dashed #6cf;
+}
+
+
+#rounded-corner
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+}
+#rounded-corner thead th.rounded-company
+{
+	background: #b9c9fe url('table-images/left.png') left -1px no-repeat;
+}
+#rounded-corner thead th.rounded-q4
+{
+	background: #b9c9fe url('table-images/right.png') right -1px no-repeat;
+}
+#rounded-corner th
+{
+	padding: 8px;
+	font-weight: normal;
+	font-size: 13px;
+	color: #039;
+	background: #b9c9fe;
+}
+#rounded-corner td
+{
+	padding: 8px;
+	background: #e8edff;
+	border-top: 1px solid #fff;
+	color: #669;
+}
+#rounded-corner tfoot td.rounded-foot-left
+{
+	background: #e8edff url('table-images/botleft.png') left bottom no-repeat;
+}
+#rounded-corner tfoot td.rounded-foot-right
+{
+	background: #e8edff url('table-images/botright.png') right bottom no-repeat;
+}
+#rounded-corner tbody tr:hover td
+{
+	background: #d0dafd;
+}
+
+
+#background-image
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+	background: url('table-images/blurry.jpg') 330px 59px no-repeat;
+}
+#background-image th
+{
+	padding: 12px;
+	font-weight: normal;
+	font-size: 14px;
+	color: #339;
+}
+#background-image td
+{
+	padding: 9px 12px;
+	color: #669;
+	border-top: 1px solid #fff;
+}
+#background-image tfoot td
+{
+	font-size: 11px;
+}
+#background-image tbody td
+{
+	background: url('table-images/back.png');
+}
+* html #background-image tbody td
+{
+	/*
+	   ----------------------------
+		PUT THIS ON IE6 ONLY STYLE
+		AS THE RULE INVALIDATES
+		YOUR STYLESHEET
+	   ----------------------------
+	*/
+	filter:progid:DXImageTransform.Microsoft.AlphaImageLoader(src='table-images/back.png',sizingMethod='crop');
+	background: none;
+}
+#background-image tbody tr:hover td
+{
+	color: #339;
+	background: none;
+}
+
+
+#gradient-style
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+}
+#gradient-style th
+{
+	font-size: 13px;
+	font-weight: normal;
+	padding: 8px;
+	background: #b9c9fe url('table-images/gradhead.png') repeat-x;
+	border-top: 2px solid #d3ddff;
+	border-bottom: 1px solid #fff;
+	color: #039;
+}
+#gradient-style td
+{
+	padding: 8px;
+	border-bottom: 1px solid #fff;
+	color: #669;
+	border-top: 1px solid #fff;
+	background: #e8edff url('table-images/gradback.png') repeat-x;
+}
+#gradient-style tfoot tr td
+{
+	background: #e8edff;
+	font-size: 12px;
+	color: #99c;
+}
+#gradient-style tbody tr:hover td
+{
+	background: #d0dafd url('table-images/gradhover.png') repeat-x;
+	color: #339;
+}
+
+
+#pattern-style-a
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+	background: url('table-images/pattern.png');
+}
+#pattern-style-a thead tr
+{
+	background: url('table-images/pattern-head.png');
+}
+#pattern-style-a th
+{
+	font-size: 13px;
+	font-weight: normal;
+	padding: 8px;
+	border-bottom: 1px solid #fff;
+	color: #039;
+}
+#pattern-style-a td
+{
+	padding: 8px;
+	border-bottom: 1px solid #fff;
+	color: #669;
+	border-top: 1px solid transparent;
+}
+#pattern-style-a tbody tr:hover td
+{
+	color: #339;
+	background: #fff;
+}
+
+
+#pattern-style-b
+{
+	font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif;
+	font-size: 12px;
+	margin: 45px;
+	width: 480px;
+	text-align: left;
+	border-collapse: collapse;
+	background: url('table-images/patternb.png');
+}
+#pattern-style-b thead tr
+{
+	background: url('table-images/patternb-head.png');
+}
+#pattern-style-b th
+{
+	font-size: 13px;
+	font-weight: normal;
+	padding: 8px;
+	border-bottom: 1px solid #fff;
+	color: #039;
+}
+#pattern-style-b td
+{
+	padding: 8px;
+	border-bottom: 1px solid #fff;
+	color: #669;
+	border-top: 1px solid transparent;
+}
+#pattern-style-b tbody tr:hover td
+{
+	color: #339;
+	background: #cdcdee;
+}
+
+
+
+templates/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Icctv huoche System Monitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <script type="text/javascript">
+        function updatePreview() {
+            var image = document.getElementById("preview");
+            image.src = "http://{{params.ip}}:{{params.http_port}}/live.jpg?random=" + new Date().getTime();
+        }
+
+        function startMonitoring() {
+            timerVal = setInterval(updatePreview, 1000);
+        }
+    </script>
+</head>
+<body onLoad="startMonitoring();">
+
+<table id="ver-minimalist">
+    <thead>
+    <tr>
+        <td>huoche Stroller Detector Status Monitor</td>
+    </tr>
+    </thead>
+</table>
+
+<table id="newspaper-c">
+    <thead>
+    <tr>
+        <th scope="col">Parameters</th>
+        <th scope="col">Video Preview</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td align="left" width="50%">
+            <ul>
+                <li><strong>Video:</strong> {{params.video}}</li>
+                <li><strong>Model:</strong> {{params.model}}</li>
+                <li><strong>Confidence Threshold:</strong> {{params.confidence}}</li>
+                <li><strong>History Size:</strong> {{params.history_size}}</li>
+                <li><strong>Ratio Threshold:</strong> {{params.decision_ratio}}</li>
+                <li><strong>Roi:</strong> {{params.roi}}</li>
+                <li><strong>Roi Coverage Th.:</strong> {{params.roi_coverage}}</li>
+                <li><strong>Program Mode:</strong> {{params.program_mode}}</li>
+                <li><strong>Http Ip:</strong> {{params.ip}}</li>
+                <li><strong>Http Port:</strong> {{params.http_port}}</li>
+            </ul>
+        </td>
+        <td align="center" width="50%">
+            <img id="preview" src="http://127.0.0.1:5003/live.jpg"/>
+        </td>
+    </tr>
+    </tbody>
+</table>
+
+</body>
+</html>
+
+
+templates/template.xml
+<?xml version="1.0" encoding="UTF-8" ?>
+<Train name="huoche">
+    <MultifunctionArea>
+    <Number>1</Number>
+    <OccupationState>{{val}}</OccupationState>
+    <OccupationType>KINDERWAGEN</OccupationType>
+    </MultifunctionArea>
+</Train>
+
+
+app/run_model_on_video.py
+import os
+import cv2
+import argparse
+
+from inference import detector_tfod
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--model",help="input model", required=True)
+    parser.add_argument("-v", "--video", help="video file", required=True)
+    args = parser.parse_args()
+
+    if not os.path.exists(args.model):
+        raise IOError("Cannot find model")
+
+    if not os.path.exists(args.video):
+        raise IOError("Cannot find videofile")
+
+    try:
+        cap = cv2.VideoCapture(args.video)
+    except Exception as e:
+        raise IOError("Can't start streaming")
+
+    if not cap.isOpened():
+        raise IOError("Error opening file")
+
+    print("initializing the detector....")
+    detector = detector_tfod.DetectorTf(args.model)
+    print("detector initialized")
+
+    cnt = 0
+    while True:
+        res, img = cap.read()
+
+        if not res:
+            raise IOError("Cannot retrieve image from video file")
+
+        if cnt % 1 == 0:
+            dets = detector.detect(img)
+
+            for d in dets:
+                print(d.pt1, d.pt2, d.score)
+                cv2.rectangle(img, d.pt1, d.pt2, (0, 0, 255), 2)
+
+        img = cv2.resize(img, (640, 480))
+        cv2.imshow("demo", img)
+        #cv2.imwrite("live.jpg", img)
+        cnt += 1
+
+        key = cv2.waitKey(100)
+        if key & 0xFF == ord('q'):
+            break
+
+
+if __name__ == "__main__":
+    main()
+
+
+app/res_to_xml.py
+import xml.etree.ElementTree as xml
+import datetime
+now = datetime.datetime.now()
+#prepare for xml template
+sec = now.second
+
+filename = "result.xml"
+root = xml.Element("Train")
+root.set("name","huoche")
+
+kiwa = xml.SubElement(root,"MultifunctionArea")
+
+num_element = xml.Element("Number")
+num_element.text = "1"
+kiwa.append(num_element)
+OccupationState = xml.Element("OccupationState")
+
+print('sec:',sec)
+if (sec > 5 and sec < 15) or (sec > 25 and sec < 35) or (sec > 45 and sec < 55):
+    OccupationState.text = "FREE"
+    OccupationType = xml.Element("OccupationType")
+    OccupationType.text = "KINDERWAGEN"
+    kiwa.append(OccupationState)
+    kiwa.append(OccupationType)
+else:
+    OccupationState.text = "OCCUPIED"
+    OccupationType = xml.Element("OccupationType")
+    OccupationType.text = "KINDERWAGEN"
+    kiwa.append(OccupationState)
+    kiwa.append(OccupationType)
+
+xml.dump(root)
+tree = xml.ElementTree(root)
+with open(filename, "w") as fh:
+    tree.write(fh)
+
+app/run_model.py
+import cv2
+import argparse
+import os
+import json
+import time
+import xml.etree.ElementTree as xml
+import datetime
+
+from inference import detector_tfod, detection_handler_dump_images, detection_handler_coco
+
+
+def read_img_data_from_list(filename):
+    with open(filename, "r") as f:
+        img_paths = f.readlines()
+    return img_paths, [0] * len(img_paths)
+
+
+def read_img_data_from_coco(filename):
+    img_paths = []
+    img_ids = []
+
+    with open(filename) as f:
+        dataset = json.load(f)
+
+    head, tail = os.path.split(filename)
+
+    for image in dataset["images"]:
+        img_paths.append(os.path.join(head, image["file_name"]))
+        img_ids.append(image["id"])
+    return img_paths, img_ids
+
+
+def parse_filename_from_full_path(full_path):
+    if not os.path.exists(full_path):
+        raise IOError("File does not exist")
+    path, filename = os.path.split(full_path)
+    return filename
+
+
+def result_to_xml_demo(result=''):
+    now = datetime.datetime.now()
+
+    min = now.minute
+    sec = now.second
+
+    filename = "result.xml"
+    root = xml.Element("Train")
+    root.set("name", "huoche")
+
+    kiwa = xml.SubElement(root, "MultifunctionArea")
+
+    num_element = xml.Element("Number")
+    num_element.text = "1"
+    kiwa.append(num_element)
+    OccupationState = xml.Element("OccupationState")
+
+    print('sec:', sec)
+    if (sec > 11 and sec < 20) or (sec > 41 and sec < 50):
+        OccupationState.text = "FREE"
+        OccupationType = xml.Element("OccupationType")
+        OccupationType.text = "KINDERWAGEN"
+        kiwa.append(OccupationState)
+        kiwa.append(OccupationType)
+    else:
+        OccupationState.text = "OCCUPIED"
+        OccupationType = xml.Element("OccupationType")
+        OccupationType.text = "Kinderwagen"
+        kiwa.append(OccupationState)
+        kiwa.append(OccupationType)
+
+    xml.dump(root)
+    tree = xml.ElementTree(root)
+    with open(filename, "w") as fh:
+        tree.write(fh)
+
+
+def result_to_xml(result=''):
+    now = datetime.datetime.now()
+
+    min = now.minute
+    sec = now.second
+
+    filename = "result.xml"
+    root = xml.Element("Train")
+    root.set("name", "huoche")
+
+    kiwa = xml.SubElement(root, "MultifunctionArea")
+
+    num_element = xml.Element("Number")
+    num_element.text = "1"
+    kiwa.append(num_element)
+    OccupationState = xml.Element("OccupationState")
+
+    print('sec:', sec)
+    
+    OccupationState.text = result
+    OccupationType = xml.Element("OccupationType")
+    OccupationType.text = "KINDERWAGEN"
+    kiwa.append(OccupationState)
+    kiwa.append(OccupationType)
+    
+
+    xml.dump(root)
+    tree = xml.ElementTree(root)
+    with open(filename, "w") as fh:
+        tree.write(fh)
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--config", help="config file for tfod inference", required=True)
+parser.add_argument("-g", "--gpu", help="gpu to run inference on", required=True)
+args = parser.parse_args()
+
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+
+if not os.path.exists(args.config):
+    raise IOError("Config file not found.")
+
+with open(args.config, "r") as f:
+    config = json.load(f)
+
+input_file = config["input_file"]
+model_path = config["model"]
+output_folder = config["output_folder"]
+output_format = config["output_format"]
+label_file = config["label_file"]
+report_filename = os.path.join(output_folder, "report.txt")
+
+is_coco = False
+if config["input_file"].endswith('.json'):
+    is_coco = True
+
+
+if is_coco:
+    img_paths, ids = read_img_data_from_coco(input_file)
+    print(img_paths)
+else:
+    img_paths, ids = read_img_data_from_list(input_file)
+
+detector = detector_tfod.DetectorTf(model_path)
+
+dumpers = []
+if output_format == "image":
+    dumpers.append(detection_handler_dump_images.DetectionResultHandlerDumpImages(output_folder, label_file))
+elif output_format == "coco":
+    dumpers.append(detection_handler_coco.DetectionResultHandlerCoco(output_folder, label_file))
+else:
+    dumpers.append(detection_handler_dump_images.DetectionResultHandlerDumpImages(output_folder, label_file))
+    dumpers.append(detection_handler_coco.DetectionResultHandlerCoco(output_folder, label_file))
+
+avg_inference_time = []
+
+for img_path, img_id in zip(img_paths, ids):
+    print(img_path, img_id)
+
+    img_path = img_path.strip()
+    try:
+        filename = parse_filename_from_full_path(img_path)
+    except IOError:
+        print("Can't read image: {}".format(img_path))
+        continue
+
+    frame = cv2.imread(img_path)
+
+    try:
+        time1 = time.time()
+        dets = detector.detect(frame)
+        if dets:
+            result = "OCCUPIED"
+        else:
+            result = "FREE"
+
+        result_to_xml(result)
+        time2 = time.time()
+        avg_inference_time.append(time2-time1)
+        if not dets:
+            continue
+    
+        for d in dumpers:
+            d.handle(frame, dets, filename, img_id)
+    except:
+        print("Cant process img: {}".format(img_path))
+        continue
+
+with open(report_filename, "w") as f:
+    f.write("Average inference time: {}".format(sum(avg_inference_time) / float(len(avg_inference_time))))
+
+for d in dumpers:
+    d.finalize()
+
+
+app/__ini__.py  empty
+
+
+inference/detection_handler.py
+import os
+import random
+import csv
+
+
+def label_file_to_dict(label_file):
+    label_map = {}
+    color_map = {}
+    with open(label_file, 'r') as csvfile:
+        reader = csv.reader(csvfile, delimiter=':')
+        for line in reader:
+            label_map[line[0]] = line[1]
+
+    keys = dict.fromkeys(label_map.keys(), [])
+    for k in keys:
+        color_map[k] = (random.uniform(0, 255),
+                        random.uniform(0, 255),
+                        random.uniform(0, 255))
+    return label_map, color_map
+
+
+class DetectionResultHandler(object):
+    label_map = None
+    color_map = None
+
+    def __init__(self, output_folder, labels_file=None):
+        if labels_file:
+            if not os.path.exists(labels_file):
+                raise IOError("Labels file does not exist!")
+
+        if labels_file:
+            self.label_map, self.color_map = label_file_to_dict(labels_file)
+
+        if not os.path.exists(output_folder):
+            print("Output folder does not exist! Created..")
+            os.makedirs(output_folder)
+
+        self.target_folder = output_folder
+
+    def handle(self, frame, detections, image_description, img_id):
+        raise NotImplementedError()
+
+    def finalize(self):
+        pass
+
+
+inference/__ini__.py
+inference/detection_handler_coco.py
+from inference import detection_handler
+import os
+import json
+from decimal import Decimal
+
+
+class DetectionResultHandlerCoco(detection_handler.DetectionResultHandler):
+
+    detection_result = []
+
+    def __init__(self, labels_file, output_folder):
+        super(DetectionResultHandlerCoco, self).__init__(labels_file, output_folder)
+
+    def handle(self, frame, detections, image_description, img_id):
+        print("coco handler:{}".format(len(detections)))
+        for d in detections:
+            x1, y1 = d.pt1
+            x2, y2 = d.pt2
+            w = x2 - x1
+            h = y2 - y1
+
+            res = {}
+            res["image_id"] = img_id
+            res["category_id"] = int(d.cls)
+            res["bbox"] = [x1, y1, w, h]
+            res["score"] = float(d.score)
+
+            self.detection_result.append(res)
+
+    def finalize(self):
+        output_filename = os.path.join(self.target_folder, "predictions.json")
+
+        with open(output_filename, "w") as f:
+            json.dump(self.detection_result, f)
+
+
+
+inference/detection_handler_dump_images.py
+from inference import detection_handler
+import cv2
+import os
+
+
+class DetectionResultHandlerDumpImages(detection_handler.DetectionResultHandler):
+
+    def __init__(self, output_folder, labels_file):
+        super(DetectionResultHandlerDumpImages, self).__init__(output_folder, labels_file)
+
+    def handle(self, frame, detections, image_description, img_id):
+        print("num detections:{}".format(len(detections)))
+        for d in detections:
+            cls_text = str(int(d.cls))
+            color = (255, 255, 255)
+
+            if self.label_map:
+                key = str(int(d.cls))
+                cls_text = self.label_map[key]
+                color = self.color_map[key]
+
+            cv2.rectangle(frame, d.pt1, d.pt2, color, 3)
+            x1, y1 = d.pt1
+            x2, y2 = d.pt2
+
+            frame = self.set_label(frame, cls_text, d.pt1, color, abs(x2-x1))
+
+        image_description = os.path.join(self.target_folder, image_description)
+        cv2.imwrite(image_description, frame)
+
+    def set_label(self, frame, text, pos, color, w):
+        font = cv2.FONT_HERSHEY_DUPLEX
+        scale = 1;
+        thickness = 1;
+        baseline = 5;
+
+        text_size = cv2.getTextSize(text, font, scale, thickness)
+        x, y = pos
+        frame[y-15:y, x:x+text_size[0][0]+baseline] = color
+        cv2.putText(frame, text, (x-baseline, y), font, 0.75, (255,255,255), 1, cv2.LINE_AA)
+
+        return frame
+
+inference/detector.py
+class Detection(object):
+    pt1 = (0, 0)
+    pt2 = (0, 0)
+    cls = None
+    score = 0.0
+
+    def __init__(self, pt1, pt2, cls, score):
+        self.pt1 = (int(pt1[0]), int(pt1[1]))
+        self.pt2 = (int(pt2[0]), int(pt2[1]))
+        self.cls = cls
+        self.score = score
+
+
+class Detector(object):
+    """ Common interface of all detectors """
+
+    def __init__(self):
+        pass
+
+    def detect(self, img):
+        pass
+
+
+tests/conftest.py
+import os
+import pytest
+from inference import detector_tfod
+
+test_dir = os.path.dirname(os.path.realpath(__file__))
+model_dir = os.path.join(test_dir, "data")
+
+
+@pytest.fixture()
+def detector_tfod_obj():
+    model_path = os.path.join(model_dir, "stroller_32_512_5_14153.pb")
+    detector = detector_tfod.DetectorTf(model_path)
+    return detector
+
+
+tests/testinference.py
+import os
+import cv2
+
+test_dir = os.path.dirname(os.path.realpath(__file__))
+data_dir = os.path.join(test_dir, "data")
+img_path = os.path.join(data_dir, "test_image.jpg")
+
+
+def test_basic_inference(detector_tfod_obj):
+    frame = cv2.imread(img_path)
+    det = detector_tfod_obj.detect(frame)
+
+    assert detector_tfod_obj.confidence_threshold == 0.98
+    assert len(det) == 1
+    assert det[0].score > 0.99
+
+tests/data/model.pb
+tests/data/im_p.jpg
+
+
+Makefile
+SHARED=~/data/huoche
+VERSION=0.2
+
+RUNTIME="--runtime=nvidia"
+GPU_STATUS="-gpu"
+SUFFIX = $(GPU_STATUS)
+
+ifeq ($(CUDA_VISIBLE_DEVICES), )
+    RUNTIME =
+    GPU_STATUS =
+    SUFFIX = "-cpu"
+endif
+
+LABEL=$(shell if [ -n "$(GIT_REF)" ] ; then  echo "$(GIT_REF)" ; else echo "latest"; fi)
+
+IMG = docker.gongsi.com/icctv/icctv-apps/huoche:$(VERSION)$(SUFFIX)
+IMG_DEPLOY = docker.gongsi.com/icctv/icctv-apps/huoche/deploy:$(LABEL)$(SUFFIX)
+
+build: docker/images/Dockerfile
+	docker build --network=host \
+		--build-arg TENSORFLOW_PKG=tensorflow$(GPU_STATUS) \
+		-t $(IMG) \
+		-f ./docker/images/Dockerfile .
+
+build-deploy: build docker/images/Dockerfile
+	docker build --network=host \
+		--build-arg FLAVOR=$(SUFFIX) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg GIT_REF=$(GIT_REF) \
+		--build-arg REPO_TOKEN=$(REPO_TOKEN) \
+		--build-arg REPO_USER=$(REPO_USER) \
+		-t $(IMG_DEPLOY) \
+		-f ./docker/images/Dockerfile.deploy .
+
+interact: build
+	-docker stop huoche_cont$(SUFFIX)
+	-docker rm huoche_cont$(SUFFIX)
+	docker run $(RUNTIME) \
+		--network=host \
+		--privileged \
+		--name huoche_cont$(SUFFIX) \
+		-v $(PWD):/usr/local/src \
+		-v $(SHARED):/data \
+		-it $(IMG) \
+		bash
+
+test: build
+	docker run --rm $(RUNTIME) \
+		-v $(PWD):/usr/local/src \
+		$(IMG) \
+		python -B -m pytest -s tests
+
+run: build
+	-docker stop huoche_cont$(SUFFIX)
+	-docker rm huoche_cont$(SUFFIX)
+	docker run -it $(RUNTIME) \
+		--network=host \
+		--privileged \
+	    --name huoche_cont$(SUFFIX) \
+		-v $(PWD):/usr/local/src \
+		-v $(SHARED):/data \
+		$(IMG) \
+		python -B app.py -c config/huoche_config.json
+
+demo: build
+	-docker stop huoche_cont$(SUFFIX)
+	-docker rm huoche_cont$(SUFFIX)
+	docker run -it $(RUNTIME) \
+		--network=host \
+		--privileged \
+    	--name huoche_cont$(SUFFIX) \
+		-v $(PWD):/usr/local/src \
+		-v $(SHARED):/data \
+		$(IMG) \
+		python -B app.py -c config/huoche_config_demo.json
+
+PACKAGING_OUTPUT_FOLDER = install
+PACKAGING_MODEL_FOLDER = $(PWD)/tests/data
+PACKAGING_MODEL_NAME = stroller_32_512_5_14153.pb
+
+pack: build-deploy
+	@echo
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo ~~ Packing iCCTV huoche Application ~~
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo
+
+	mkdir -p $(PACKAGING_OUTPUT_FOLDER)
+	docker save $(IMG_DEPLOY) -o /tmp/img_icctv_huoche_$(LABEL)$(SUFFIX).tar
+
+	@$(shell rm /tmp/image_name; echo $(IMG_DEPLOY) >> /tmp/image_name)
+	@$(shell rm /tmp/runtime; echo $(RUNTIME) >> /tmp/runtime)
+
+	tar --create -M --file=$(PACKAGING_OUTPUT_FOLDER)/pkg_icctv_huoche_$(LABEL)$(SUFFIX).tar \
+	README.md CHANGELOG.md LICENCE.md \
+	-C $(PWD)/deploy --file= huoche_config.json Makefile \
+	-C $(PACKAGING_MODEL_FOLDER) --file= $(PACKAGING_MODEL_NAME) \
+	-C /tmp --file= img_icctv_huoche_$(LABEL)$(SUFFIX).tar image_name runtime
+
+	@echo
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo $(PACKAGING_OUTPUT_FOLDER)/pkg_icctv_huoche_$(LABEL)$(SUFFIX).tar
+	@echo ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	@echo
+
+
+analyzer.py
+import cv2
+import os
+import threading
+import time
+import datetime
+from inference import detector_tfod
+from collections import deque
+
+import python_logger as log
+
+logger = log.setup_custom_logger(__name__)
+
+
+class Analyzer:
+
+    t = None
+    state = False
+    detector = None
+    is_running = False
+    confidence = None
+    decision_ratio = None
+    roi_coverage = None
+    history_size = None
+    program_mode = "live"
+    display_debug_images = False
+    write_debug_images = None
+    debug_img_folder = None
+    history = deque([])
+    counter = 0
+
+    def __init__(self, config):
+        self.video_loc = config.config_video["location"]
+        self.cap = cv2.VideoCapture(self.video_loc)
+        self.w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.roi = [0, 0, self.w, self.h]
+
+        self.model = config.config_detector["model"]
+        if not os.path.exists(self.model):
+            raise IOError("Given model does not exist")
+
+        self.load_params_from_config(config)
+
+        self.reset_history(self.history_size)
+
+        self.start(self.program_mode)
+
+    def reset_history(self, size):
+        self.history_size = size
+        self.history = deque([])
+
+    def start(self, mode):
+        self.state = False
+        self.is_running = True
+        if mode == "demo":
+            self.t = threading.Thread(target=self.demo_mode)
+        else:
+            self.detector = detector_tfod.DetectorTf(self.model)
+            self.detector.confidence_threshold = self.confidence
+            self.t = threading.Thread(target=self.run)
+        self.t.start()
+
+    def run(self):
+        while self.is_running:
+            res, frame = self.cap.read()
+
+            if not res:
+                logger.error("error reading image", exc_info=True)
+                break
+
+            state = False
+            res = self.detector.detect(frame)
+
+            roi_coverage = 0.0
+            for d in res:
+                if d.cls == 1:
+                    cv2.rectangle(frame, d.pt1, d.pt2, (0, 255, 255), 2)
+                    roi_coverage = self.calc_roi_coverage(d)
+
+                    if roi_coverage > self.roi_coverage:
+                        state = True
+                        break
+                else:
+                    cv2.rectangle(frame, d.pt1, d.pt2, (255, 0, 0), 2)
+
+            if len(self.history) == self.history_size:
+                self.history.pop()
+            self.history.appendleft(state)
+
+            self.state = False
+            hit_ratio = sum(self.history) / float(len(self.history))
+
+            if hit_ratio > self.decision_ratio:
+                self.state = True
+
+            if self.write_debug_images:
+                self.draw_info_on_frame(frame, self.state, state, hit_ratio, roi_coverage)
+                self.draw_roi_on_frame(frame, state)
+                cv2.imwrite(os.path.join(self.debug_img_folder, "live.jpg"), frame)
+
+            if self.display_debug_images:
+                cv2.imshow("live", frame)
+
+            if self.counter % 10 == 0:
+                logger.info(self.history)
+                logger.debug("Hit ratio: {}".format(hit_ratio))
+                logger.debug("Roi coverage: {}".format(roi_coverage))
+                logger.debug("Status: {}".format(self.state))
+
+            self.counter += 1
+
+    def calc_roi_coverage(self, detection):
+        x1, y1 = detection.pt1
+        x2, y2 = detection.pt2
+
+        rx1, ry1, rx2, ry2 = self.roi
+
+        dx = min(x2, rx2) - max(x1, rx1)
+        dy = min(y2, ry2) - max(y1, ry1)
+        area = 0
+        if (dx >= 0) and (dy >= 0):
+            area = dx * dy
+
+        total_area = abs(rx2 - rx1) * abs(ry1 - ry2)
+
+        return area / float(total_area)
+
+    def get_state(self):
+        return self.state
+
+    def demo_mode(self):
+        while self.is_running:
+            now = datetime.datetime.now()
+            sec = now.second
+            if (sec > 5 and sec < 15) or (sec > 25 and sec < 35) or (sec > 45 and sec < 55):
+                self.state = True
+            else:
+                self.state = False
+            time.sleep(0.033)
+        return self.state
+
+    def switch_mode(self, mode):
+        if self.program_mode != mode:
+            self.program_mode = mode
+            self.stop()
+            self.start(mode)
+
+    def stop(self):
+        self.state = False
+        self.is_running = False
+        logger.error("waiting detector thread to join", exc_info=True)
+        self.t.join()
+
+    def log_current_params(self):
+        logger.info("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
+        logger.info("Video location:{}, w:{}, h:{}".format(self.video_loc, self.w, self.h))
+        logger.info("ROI:{}".format(self.roi))
+        logger.info("Detection model:{}".format(self.model))
+        logger.info("Confidence :{}".format(self.confidence))
+        logger.info("History size :{}".format(self.history_size))
+        logger.info("Decision ratio:{}".format(self.decision_ratio))
+        logger.info("Program mode:{}".format(self.program_mode))
+        logger.info("Roi coverage:{}".format(self.roi_coverage))
+        logger.info("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
+
+    def get_current_params_as_json(self):
+        params = {}
+        params["video"] = self.video_loc
+        params["img_size"] = (self.w, self.h)
+        params["model"] = self.model
+        params["confidence"] = self.confidence
+        params["history_size"] = self.history_size
+        params["decision_ratio"] = self.decision_ratio
+        params["program_mode"] = self.program_mode
+        params["roi"] = self.roi
+        params["roi_coverage"] = self.roi_coverage
+        return params
+
+    def set_confidence(self, confidence):
+        self.confidence = confidence
+        self.detector.confidence_threshold = self.confidence
+
+    def set_decision_ratio(self, ratio):
+        self.decision_ratio = ratio
+
+    def set_roi_coverage(self, coverage):
+        self.roi_coverage = coverage
+
+    def set_roi(self, roi):
+        self.roi = roi
+
+    def draw_roi_on_frame(self, frame, state):
+        x1, y1, x2, y2 = self.roi
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255*int(state), 255*(1-int(state))), 2)
+
+    def draw_info_on_frame(self, frame, gstate, lstate, hit_ratio, roi_coverage):
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        thickness = 1
+
+        cv2.putText(frame, "GState: {}".format(gstate), (25, 25), font, 0.6,
+                    (0, 255*int(gstate), 255*(1-int(gstate))), thickness + 1)
+
+        cv2.putText(frame, "LocState: {}".format(lstate), (25, 60), font, 0.5,
+                    (0, 255 * int(lstate), 255 * (1 - int(lstate))), thickness)
+
+        cv2.putText(frame, "HitR: {}".format(hit_ratio), (25, 85), font, 0.5, (255, 255, 0), thickness)
+
+        cv2.putText(frame, "RoiC: {}".format(roi_coverage), (25, 110), font, 0.5, (255, 255, 0), thickness)
+
+    def load_params_from_config(self, config):
+        if "roi" in config.config_video:
+            self.roi = [int(config.config_video["roi"]["left"]),
+                        int(config.config_video["roi"]["upper"]),
+                        int(config.config_video["roi"]["right"]),
+                        int(config.config_video["roi"]["lower"])]
+
+        self.confidence = config.config_detector.get("confidence", 0.98)
+        self.decision_ratio = config.config_detector.get("decision_ratio", 0.8)
+        self.roi_coverage = config.config_detector.get("roi_coverage", 0.6)
+        self.history_size = config.config_detector.get("history_size", 20)
+
+        self.program_mode = config.config_service["mode"]
+
+        self.display_debug_images = config.config_debug["display_debug_images"]
+        self.write_debug_images = config.config_debug["write_debug_images"]
+        self.debug_img_folder = config.config_debug["debug_img_folder"]
+
+        if not os.path.exists(self.debug_img_folder):
+            os.makedirs(self.debug_img_folder)
+
+
+
+app.py
+from flask import Flask, make_response, render_template, jsonify, redirect, url_for
+import analyzer
+import argparse
+import signal
+import python_logger as log
+
+from werkzeug.exceptions import BadRequest
+
+from configuration import Configuration
+
+logger = log.setup_custom_logger(__name__)
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--config", required=True)
+args = parser.parse_args()
+
+configuration = Configuration(args.config)
+
+detector = None
+
+app = Flask(__name__)
+
+
+def gracefully_exit(signal, frame):
+    logger.info("Stopping all threads and exiting...")
+    detector.stop()
+    exit()
+
+
+signal.signal(signal.SIGINT, gracefully_exit)
+signal.signal(signal.SIGTERM, gracefully_exit)
+
+
+@app.route("/cgi-bin/result.xml")
+def return_result():
+    state = detector.get_state()
+    temp_xml = render_template('template.xml', val=state)
+    response = make_response(temp_xml)
+    response.headers["Content-Type"] = "application/xml"
+    return response
+
+
+@app.route("/", methods=['GET'])
+@app.route("/index", methods=['GET'])
+@app.route("/params", methods=['GET'])
+def get_params():
+    params = detector.get_current_params_as_json()
+
+    ip = {}
+    ip["ip"] = configuration.config_service["ip"]
+    ip["http_port"] = configuration.config_service["http_port"]
+    params.update(ip)
+
+    return render_template("index.html", params=params)
+
+
+@app.route("/params/confidence/<float:confidence>", methods=['GET'])
+def set_confidence(confidence):
+    try:
+        detector.set_confidence(confidence)
+    except Exception as err:
+        raise BadRequest("Can't set confidence: {}".format(err.args))
+    return redirect(url_for("get_params"))
+
+
+@app.route("/params/ratio/<float:ratio>", methods=['GET'])
+def set_decision_ratio(ratio):
+    try:
+        detector.set_decision_ratio(ratio)
+    except Exception as err:
+        raise BadRequest("Can't set decision ratio: {}".format(err.args))
+    return redirect(url_for("get_params"))
+
+
+@app.route("/params/coverage/<float:coverage>", methods=['GET'])
+def set_roi_coverage(coverage):
+    try:
+        detector.set_roi_coverage(coverage)
+    except Exception as err:
+        raise BadRequest("Can't set coverage ratio: {}".format(err.args))
+    return redirect(url_for("get_params"))
+
+
+@app.route("/params/roi/<int:x>/<int:y>/<int:w>/<int:h>", methods=['GET'])
+def set_roi(x, y, w, h):
+    rect = [x, y, x+w, y+h]
+    try:
+        detector.set_roi(rect)
+    except Exception as err:
+        raise BadRequest("Can't set roi: {}".format(err.args))
+    return redirect(url_for("get_params"))
+
+
+@app.route("/params/mode/<string:mode>", methods=['GET'])
+def set_mode(mode):
+    try:
+        detector.switch_mode(mode)
+    except Exception as err:
+        raise BadRequest("Can't change the program mode to {}: {}".format(mode, err.args))
+    return redirect(url_for("get_params"))
+
+
+@app.route("/params/history/<int:size>", methods=['GET'])
+def reset_history(size):
+    try:
+        detector.reset_history(size)
+    except Exception as err:
+        raise BadRequest("Can't reset history with size {}: {}".format(size, err.args))
+    return redirect(url_for("get_params"))
+
+
+@app.route("/params/reset/<int:code>", methods=['GET'])
+def reset_params_from_config(code):
+    if code == configuration.last_reset_code:
+        raise BadRequest("Reset code cannot be reused")
+
+    try:
+        detector.load_params_from_config(configuration)
+    except Exception as err:
+        raise BadRequest("Can't reset parameters: {}".format(err.args))
+
+    configuration.last_reset_code = code
+    return redirect(url_for("get_params"))
+
+
+def create_detector_from_config():
+    return analyzer.Analyzer(configuration)
+
+
+if __name__ == '__main__':
+    detector = create_detector_from_config()
+    app.run(host='0.0.0.0',
+            port=configuration.config_service["port"],
+            debug=False)
+
+
+configuration.py (reset)
+import os
+import json
+
+from version import version
+
+
+class Configuration(object):
+
+    last_reset_code = 0
+
+    def __init__(self, config_path):
+        if not os.path.exists(config_path):
+            raise IOError("config file does not exist!")
+
+        with open(config_path, "r") as f:
+            config_json = json.load(f)
+
+        if "version" not in config_json:
+            raise IOError("Config file should have a version.")
+
+        if version != config_json["version"]:
+            raise IOError("Config version and program version do not match: {}->{}".format(version, version))
+
+        self.config_service = config_json["service"]
+        self.config_detector = config_json["detector"]
+        self.config_debug = config_json["debug"]
+        self.config_video = config_json["video"]
+
+
+vision.py
+version = "0.2"
+
+
+
+
